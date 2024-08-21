@@ -117,7 +117,7 @@ class Game2048 extends Phaser.Scene {
 
     tile.setScale(0);
     this.tweens.add({
-      targets: tile,
+      targets: [tile, text],
       scale: 1,
       duration: 200,
       ease: "Back.easeOut",
@@ -261,8 +261,6 @@ class Game2048 extends Phaser.Scene {
 
     Promise.all(movePromises).then(() => {
       if (moved) {
-        this.score += 10;
-        this.scoreText.setText("Score: " + this.score);
         this.addRandomTile();
       }
       this.isMoving = false;
@@ -273,6 +271,11 @@ class Game2048 extends Phaser.Scene {
   moveTile(fromRow, fromCol, toRow, toCol) {
     return new Promise((resolve) => {
       const tile = this.tiles[fromRow][fromCol];
+      if (!tile) {
+        console.error("Attempt to move non-existent tile");
+        resolve();
+        return;
+      }
       this.tiles[toRow][toCol] = tile;
       this.tiles[fromRow][fromCol] = null;
 
@@ -301,6 +304,12 @@ class Game2048 extends Phaser.Scene {
       const fromTile = this.tiles[fromRow][fromCol];
       const toTile = this.tiles[toRow][toCol];
 
+      if (!fromTile || !toTile) {
+        console.error("Attempt to merge non-existent tiles");
+        resolve();
+        return;
+      }
+
       const newValue = fromTile.value * 2;
       this.score += newValue;
 
@@ -324,7 +333,6 @@ class Game2048 extends Phaser.Scene {
           fromTile.text.destroy();
           this.tiles[fromRow][fromCol] = null;
 
-          // Обновляем значение и внешний вид целевой плитки
           toTile.value = newValue;
           const newColor = this.getTileColor(newValue);
           toTile.tile.clear();
@@ -337,16 +345,9 @@ class Game2048 extends Phaser.Scene {
             10
           );
 
-          // Уничтожаем старый текст и создаем новый
-          toTile.text.destroy();
+          toTile.text.setText(newValue.toString());
           const textColor = newValue <= 4 ? "#776e65" : "#f9f6f2";
-          toTile.text = this.add
-            .text(x, y, newValue.toString(), {
-              fontSize: "32px",
-              fill: textColor,
-              fontStyle: "bold",
-            })
-            .setOrigin(0.5);
+          toTile.text.setColor(textColor);
 
           this.tweens.add({
             targets: [toTile.tile, toTile.text],
