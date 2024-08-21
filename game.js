@@ -1,6 +1,3 @@
-// game.js
-import Phaser from "phaser";
-
 class Game2048 extends Phaser.Scene {
   constructor() {
     super("Game2048");
@@ -13,9 +10,6 @@ class Game2048 extends Phaser.Scene {
   }
 
   create() {
-    // Установка willReadFrequently для оптимизации Canvas
-    this.game.canvas.getContext("2d").canvas.willReadFrequently = true;
-
     this.createGrid();
     this.createTiles();
     this.addRandomTile();
@@ -67,11 +61,7 @@ class Game2048 extends Phaser.Scene {
         this.gridSpacing * (this.gridSize + 1) +
         10,
       "Score: 0",
-      {
-        fontSize: "24px",
-        fill: "#776e65",
-        fontFamily: "Arial, sans-serif",
-      }
+      { fontSize: "24px", fill: "#776e65" }
     );
   }
 
@@ -119,7 +109,6 @@ class Game2048 extends Phaser.Scene {
       .text(x, y, value.toString(), {
         fontSize: "32px",
         fill: textColor,
-        fontFamily: "Arial, sans-serif",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
@@ -356,12 +345,9 @@ class Game2048 extends Phaser.Scene {
             10
           );
 
-          const textColor = newValue <= 4 ? "#776e65" : "#f9f6f2";
           toTile.text.setText(newValue.toString());
+          const textColor = newValue <= 4 ? "#776e65" : "#f9f6f2";
           toTile.text.setColor(textColor);
-          toTile.text.setFontSize("32px");
-
-          this.scoreText.setText("Score: " + this.score);
 
           this.tweens.add({
             targets: [toTile.tile, toTile.text],
@@ -416,5 +402,3 @@ class Game2048 extends Phaser.Scene {
     this.scene.restart();
   }
 }
-
-export default Game2048;
