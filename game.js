@@ -304,9 +304,6 @@ class Game2048 extends Phaser.Scene {
       const newValue = fromTile.value * 2;
       this.score += newValue;
 
-      toTile.value = newValue;
-      toTile.text.setText(newValue.toString());
-
       const x =
         this.gridSpacing +
         toCol * (this.tileSize + this.gridSpacing) +
@@ -327,6 +324,8 @@ class Game2048 extends Phaser.Scene {
           fromTile.text.destroy();
           this.tiles[fromRow][fromCol] = null;
 
+          // Обновляем значение и внешний вид целевой плитки
+          toTile.value = newValue;
           const newColor = this.getTileColor(newValue);
           toTile.tile.clear();
           toTile.tile.fillStyle(newColor);
@@ -338,8 +337,16 @@ class Game2048 extends Phaser.Scene {
             10
           );
 
+          // Уничтожаем старый текст и создаем новый
+          toTile.text.destroy();
           const textColor = newValue <= 4 ? "#776e65" : "#f9f6f2";
-          toTile.text.setColor(textColor);
+          toTile.text = this.add
+            .text(x, y, newValue.toString(), {
+              fontSize: "32px",
+              fill: textColor,
+              fontStyle: "bold",
+            })
+            .setOrigin(0.5);
 
           this.tweens.add({
             targets: [toTile.tile, toTile.text],
