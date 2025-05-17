@@ -432,6 +432,17 @@ class Game2048 extends Phaser.Scene {
           fromTile.text.destroy();
           this.tiles[fromRow][fromCol] = null;
 
+          // Tile may have been removed by other animations (e.g., bombs)
+          if (
+            !toTile.text ||
+            !toTile.text.scene ||
+            !toTile.tile ||
+            !toTile.tile.scene
+          ) {
+            resolve();
+            return;
+          }
+
           toTile.value = newValue;
           toTile.type = "number";
           const newColor = this.getTileColor(newValue);
