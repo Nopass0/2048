@@ -9,6 +9,9 @@ class Game2048 extends Phaser.Scene {
     this.isMoving = false;
     this.audioCtx = null;
     this.ambientOsc = null;
+    this.ambientInterval = null;
+    this.obstacleProbability = 0.05;
+    this.bonusProbability = 0.05;
   }
 
   init() {
@@ -88,12 +91,18 @@ class Game2048 extends Phaser.Scene {
 
     if (emptyCells.length > 0) {
       const { row, col } = Phaser.Utils.Array.GetRandom(emptyCells);
-      const value = Math.random() < this.fourProbability ? 4 : 2;
-      this.addTile(row, col, value);
+      if (Math.random() < this.obstacleProbability) {
+        this.addTile(row, col, 0, "obstacle");
+      } else if (Math.random() < this.bonusProbability) {
+        this.addTile(row, col, 2, "bonus");
+      } else {
+        const value = Math.random() < this.fourProbability ? 4 : 2;
+        this.addTile(row, col, value);
+      }
     }
   }
 
-  addTile(row, col, value) {
+  addTile(row, col, value, type = "number") {
     const x =
       this.gridSpacing +
       col * (this.tileSize + this.gridSpacing) +
@@ -104,7 +113,14 @@ class Game2048 extends Phaser.Scene {
       this.tileSize / 2;
 
     const tile = this.add.graphics();
-    const color = this.getTileColor(value);
+    let color;
+    if (type === "obstacle") {
+      color = 0x555555;
+    } else if (type === "bonus") {
+      color = 0xffc107;
+    } else {
+      color = this.getTileColor(value);
+    }
     tile.fillStyle(color);
     tile.fillRoundedRect(
       -this.tileSize / 2,
@@ -115,16 +131,23 @@ class Game2048 extends Phaser.Scene {
     );
     tile.setPosition(x, y);
 
-    const textColor = value <= 4 ? this.theme.tileTextDark : this.theme.tileTextLight;
+    const textColor =
+      type === "obstacle" || type === "bonus"
+        ? this.theme.tileTextLight
+        : value <= 4
+        ? this.theme.tileTextDark
+        : this.theme.tileTextLight;
+    const displayText =
+      type === "obstacle" ? "X" : type === "bonus" ? "*" : value.toString();
     const text = this.add
-      .text(x, y, value.toString(), {
+      .text(x, y, displayText, {
         fontSize: "32px",
         fill: textColor,
         fontStyle: "bold",
       })
       .setOrigin(0.5);
 
-    this.tiles[row][col] = { tile, text, value };
+    this.tiles[row][col] = { tile, text, value, type };
 
     tile.setScale(0);
     tile.setAlpha(0);
@@ -233,7 +256,7 @@ class Game2048 extends Phaser.Scene {
 
     positions.forEach((pos) => {
       const { row, col } = pos;
-      if (this.tiles[row][col] !== null) {
+      if (this.tiles[row][col] !== null && this.tiles[row][col].type !== "obstacle") {
         let newRow = row + vector.y;
         let newCol = col + vector.x;
         let merged = false;
@@ -244,12 +267,19 @@ class Game2048 extends Phaser.Scene {
           newCol >= 0 &&
           newCol < this.gridSize
         ) {
-          if (this.tiles[newRow][newCol] === null) {
+          const target = this.tiles[newRow][newCol];
+          if (target === null) {
             newRow += vector.y;
             newCol += vector.x;
+          } else if (target.type === "obstacle") {
+            break;
           } else if (
             !merged &&
-            this.tiles[newRow][newCol].value === this.tiles[row][col].value
+            ((target.type === "number" &&
+              this.tiles[row][col].type === "number" &&
+              target.value === this.tiles[row][col].value) ||
+              (target.type === "bonus" && this.tiles[row][col].type === "number") ||
+              (target.type === "number" && this.tiles[row][col].type === "bonus"))
           ) {
             movePromises.push(this.mergeTiles(row, col, newRow, newCol));
             merged = true;
@@ -322,7 +352,19 @@ class Game2048 extends Phaser.Scene {
         return;
       }
 
-      const newValue = fromTile.value * 2;
+      if (fromTile.type === "obstacle" || toTile.type === "obstacle") {
+        resolve();
+        return;
+      }
+
+      let newValue;
+      if (fromTile.type === "bonus" && toTile.type === "number") {
+        newValue = toTile.value * 2;
+      } else if (toTile.type === "bonus" && fromTile.type === "number") {
+        newValue = fromTile.value * 2;
+      } else {
+        newValue = fromTile.value * 2;
+      }
       this.score += newValue;
       this.scoreText.setText("Score: " + this.score);
       this.playMergeSound();
@@ -348,6 +390,7 @@ class Game2048 extends Phaser.Scene {
           this.tiles[fromRow][fromCol] = null;
 
           toTile.value = newValue;
+          toTile.type = "number";
           const newColor = this.getTileColor(newValue);
           toTile.tile.clear();
           toTile.tile.fillStyle(newColor);
@@ -385,18 +428,28 @@ class Game2048 extends Phaser.Scene {
     let canMove = false;
     for (let row = 0; row < this.gridSize; row++) {
       for (let col = 0; col < this.gridSize; col++) {
-        if (this.tiles[row][col] === null) {
+        const tile = this.tiles[row][col];
+        if (tile === null) {
           canMove = true;
           break;
         }
-        const value = this.tiles[row][col].value;
+        if (tile.type === "obstacle") continue;
+        if (tile.type === "bonus") {
+          canMove = true;
+          break;
+        }
+        const value = tile.value;
         if (
           (row < this.gridSize - 1 &&
             this.tiles[row + 1][col] &&
-            this.tiles[row + 1][col].value === value) ||
+            this.tiles[row + 1][col].type !== "obstacle" &&
+            (this.tiles[row + 1][col].value === value ||
+              this.tiles[row + 1][col].type === "bonus")) ||
           (col < this.gridSize - 1 &&
             this.tiles[row][col + 1] &&
-            this.tiles[row][col + 1].value === value)
+            this.tiles[row][col + 1].type !== "obstacle" &&
+            (this.tiles[row][col + 1].value === value ||
+              this.tiles[row][col + 1].type === "bonus"))
         ) {
           canMove = true;
           break;
@@ -431,9 +484,17 @@ class Game2048 extends Phaser.Scene {
     const gain = this.audioCtx.createGain();
     gain.gain.value = 0.02;
     this.ambientOsc.type = "sine";
-    this.ambientOsc.frequency.value = 220;
     this.ambientOsc.connect(gain).connect(this.audioCtx.destination);
+    this.changeAmbientFrequency();
     this.ambientOsc.start();
+    this.ambientInterval = setInterval(() => this.changeAmbientFrequency(), 1000);
+  }
+
+  changeAmbientFrequency() {
+    if (!this.ambientOsc) return;
+    const freqs = [110, 165, 220, 330, 440];
+    const f = freqs[Math.floor(Math.random() * freqs.length)];
+    this.ambientOsc.frequency.setValueAtTime(f, this.audioCtx.currentTime);
   }
 
   stopAmbient() {
@@ -441,6 +502,10 @@ class Game2048 extends Phaser.Scene {
       this.ambientOsc.stop();
       this.ambientOsc.disconnect();
       this.ambientOsc = null;
+    }
+    if (this.ambientInterval) {
+      clearInterval(this.ambientInterval);
+      this.ambientInterval = null;
     }
   }
 
@@ -456,12 +521,30 @@ class Game2048 extends Phaser.Scene {
     osc.stop(this.audioCtx.currentTime + duration);
   }
 
+  playPuckSound() {
+    if (!this.audioCtx) return;
+    const duration = 0.05;
+    const bufferSize = this.audioCtx.sampleRate * duration;
+    const buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+    const source = this.audioCtx.createBufferSource();
+    source.buffer = buffer;
+    const filter = this.audioCtx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 1000;
+    source.connect(filter).connect(this.audioCtx.destination);
+    source.start();
+  }
+
   playMoveSound() {
-    this.playBeep(200, 0.05, 0.05);
+    this.playPuckSound();
   }
 
   playMergeSound() {
-    this.playBeep(440, 0.15, 0.1);
+    this.playPuckSound();
   }
 
   playSpawnSound() {
