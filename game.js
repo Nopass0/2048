@@ -12,6 +12,10 @@ class Game2048 extends Phaser.Scene {
     this.ambientInterval = null;
     this.obstacleProbability = 0.05;
     this.bonusProbability = 0.05;
+    this.bombProbability = 0.02;
+    this.aiEnabled = false;
+    this.aiTimer = null;
+    this.highScore = 0;
   }
 
   init() {
@@ -20,6 +24,7 @@ class Game2048 extends Phaser.Scene {
 
   create() {
     this.score = 0;
+    this.highScore = parseInt(localStorage.getItem("highScore")) || 0;
     this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
     document.body.style.backgroundColor = this.theme.backgroundColor;
     this.createGrid();
@@ -74,7 +79,7 @@ class Game2048 extends Phaser.Scene {
       this.tileSize * this.gridSize +
         this.gridSpacing * (this.gridSize + 1) +
         10,
-      "Score: 0",
+      `Score: 0  High: ${this.highScore}`,
       { fontSize: "24px", fill: this.theme.scoreColor }
     );
   }
@@ -95,6 +100,8 @@ class Game2048 extends Phaser.Scene {
         this.addTile(row, col, 0, "obstacle");
       } else if (Math.random() < this.bonusProbability) {
         this.addTile(row, col, 2, "bonus");
+      } else if (Math.random() < this.bombProbability) {
+        this.addTile(row, col, 0, "bomb");
       } else {
         const value = Math.random() < this.fourProbability ? 4 : 2;
         this.addTile(row, col, value);
@@ -118,6 +125,8 @@ class Game2048 extends Phaser.Scene {
       color = 0x555555;
     } else if (type === "bonus") {
       color = 0xffc107;
+    } else if (type === "bomb") {
+      color = 0xff0000;
     } else {
       color = this.getTileColor(value);
     }
@@ -132,13 +141,19 @@ class Game2048 extends Phaser.Scene {
     tile.setPosition(x, y);
 
     const textColor =
-      type === "obstacle" || type === "bonus"
+      type === "obstacle" || type === "bonus" || type === "bomb"
         ? this.theme.tileTextLight
         : value <= 4
         ? this.theme.tileTextDark
         : this.theme.tileTextLight;
     const displayText =
-      type === "obstacle" ? "X" : type === "bonus" ? "*" : value.toString();
+      type === "obstacle"
+        ? "X"
+        : type === "bonus"
+        ? "*"
+        : type === "bomb"
+        ? "B"
+        : value.toString();
     const text = this.add
       .text(x, y, displayText, {
         fontSize: "32px",
@@ -176,6 +191,10 @@ class Game2048 extends Phaser.Scene {
   }
 
   handleKey(event) {
+    if (event.code === "KeyA") {
+      this.toggleAI();
+      return;
+    }
     if (this.isMoving) return;
 
     switch (event.code) {
@@ -274,6 +293,14 @@ class Game2048 extends Phaser.Scene {
           } else if (target.type === "obstacle") {
             break;
           } else if (
+            target.type === "bomb" ||
+            this.tiles[row][col].type === "bomb"
+          ) {
+            movePromises.push(this.mergeTiles(row, col, newRow, newCol));
+            merged = true;
+            moved = true;
+            break;
+          } else if (
             !merged &&
             ((target.type === "number" &&
               this.tiles[row][col].type === "number" &&
@@ -357,6 +384,18 @@ class Game2048 extends Phaser.Scene {
         return;
       }
 
+      if (fromTile.type === "bomb" || toTile.type === "bomb") {
+        fromTile.tile.destroy();
+        fromTile.text.destroy();
+        toTile.tile.destroy();
+        toTile.text.destroy();
+        this.tiles[fromRow][fromCol] = null;
+        this.tiles[toRow][toCol] = null;
+        this.explode(toRow, toCol);
+        resolve();
+        return;
+      }
+
       let newValue;
       if (fromTile.type === "bonus" && toTile.type === "number") {
         newValue = toTile.value * 2;
@@ -366,7 +405,11 @@ class Game2048 extends Phaser.Scene {
         newValue = fromTile.value * 2;
       }
       this.score += newValue;
-      this.scoreText.setText("Score: " + this.score);
+      if (this.score > this.highScore) {
+        this.highScore = this.score;
+        localStorage.setItem("highScore", this.highScore);
+      }
+      this.scoreText.setText(`Score: ${this.score}  High: ${this.highScore}`);
       this.playMergeSound();
 
       const x =
@@ -434,7 +477,7 @@ class Game2048 extends Phaser.Scene {
           break;
         }
         if (tile.type === "obstacle") continue;
-        if (tile.type === "bonus") {
+        if (tile.type === "bonus" || tile.type === "bomb") {
           canMove = true;
           break;
         }
@@ -444,12 +487,14 @@ class Game2048 extends Phaser.Scene {
             this.tiles[row + 1][col] &&
             this.tiles[row + 1][col].type !== "obstacle" &&
             (this.tiles[row + 1][col].value === value ||
-              this.tiles[row + 1][col].type === "bonus")) ||
+              this.tiles[row + 1][col].type === "bonus" ||
+              this.tiles[row + 1][col].type === "bomb")) ||
           (col < this.gridSize - 1 &&
             this.tiles[row][col + 1] &&
             this.tiles[row][col + 1].type !== "obstacle" &&
             (this.tiles[row][col + 1].value === value ||
-              this.tiles[row][col + 1].type === "bonus"))
+              this.tiles[row][col + 1].type === "bonus" ||
+              this.tiles[row][col + 1].type === "bomb"))
         ) {
           canMove = true;
           break;
@@ -465,6 +510,11 @@ class Game2048 extends Phaser.Scene {
 
   gameOver(win) {
     this.isMoving = true;
+    if (this.aiTimer) {
+      clearInterval(this.aiTimer);
+      this.aiTimer = null;
+      this.aiEnabled = false;
+    }
     const message = win ? "Уровень пройден" : "Нельзя сделать ход";
     alert(message);
     this.stopAmbient();
@@ -549,5 +599,65 @@ class Game2048 extends Phaser.Scene {
 
   playSpawnSound() {
     this.playBeep(660, 0.05, 0.05);
+  }
+
+  explode(centerRow, centerCol) {
+    const offsets = [-1, 0, 1];
+    offsets.forEach((dy) => {
+      offsets.forEach((dx) => {
+        const r = centerRow + dy;
+        const c = centerCol + dx;
+        if (
+          r >= 0 &&
+          r < this.gridSize &&
+          c >= 0 &&
+          c < this.gridSize &&
+          this.tiles[r][c]
+        ) {
+          this.tiles[r][c].tile.destroy();
+          this.tiles[r][c].text.destroy();
+          this.tiles[r][c] = null;
+        }
+      });
+    });
+    const circle = this.add
+      .circle(
+        this.gridSpacing +
+          centerCol * (this.tileSize + this.gridSpacing) +
+          this.tileSize / 2,
+        this.gridSpacing +
+          centerRow * (this.tileSize + this.gridSpacing) +
+          this.tileSize / 2,
+        this.tileSize / 2,
+        0xff0000,
+        0.5
+      )
+      .setScale(0);
+    this.tweens.add({
+      targets: circle,
+      scale: 1.5,
+      alpha: 0,
+      duration: 300,
+      onComplete: () => circle.destroy(),
+    });
+    this.playBeep(120, 0.2, 0.2);
+  }
+
+  toggleAI() {
+    if (this.aiEnabled) {
+      this.aiEnabled = false;
+      if (this.aiTimer) clearInterval(this.aiTimer);
+      this.aiTimer = null;
+    } else {
+      this.aiEnabled = true;
+      this.aiTimer = setInterval(() => this.autoMove(), 500);
+    }
+  }
+
+  autoMove() {
+    if (this.isMoving) return;
+    const dirs = ["up", "down", "left", "right"];
+    const dir = Phaser.Utils.Array.GetRandom(dirs);
+    this.move(dir);
   }
 }
