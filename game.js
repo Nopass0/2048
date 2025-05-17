@@ -9,7 +9,13 @@ class Game2048 extends Phaser.Scene {
     this.isMoving = false;
   }
 
+  init() {
+    this.theme = window.themes[window.currentThemeIndex] || window.themes[0];
+  }
+
   create() {
+    this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
+    document.body.style.backgroundColor = this.theme.backgroundColor;
     this.createGrid();
     this.createTiles();
     this.addRandomTile();
@@ -21,7 +27,7 @@ class Game2048 extends Phaser.Scene {
 
   createGrid() {
     const graphics = this.add.graphics();
-    graphics.fillStyle(0xbbada0, 1);
+    graphics.fillStyle(this.theme.gridBackground, 1);
     graphics.fillRoundedRect(
       0,
       0,
@@ -32,7 +38,7 @@ class Game2048 extends Phaser.Scene {
 
     for (let row = 0; row < this.gridSize; row++) {
       for (let col = 0; col < this.gridSize; col++) {
-        graphics.fillStyle(0xcdc1b4, 1);
+        graphics.fillStyle(this.theme.emptyTile, 1);
         graphics.fillRoundedRect(
           this.gridSpacing + col * (this.tileSize + this.gridSpacing),
           this.gridSpacing + row * (this.tileSize + this.gridSpacing),
@@ -61,7 +67,7 @@ class Game2048 extends Phaser.Scene {
         this.gridSpacing * (this.gridSize + 1) +
         10,
       "Score: 0",
-      { fontSize: "24px", fill: "#776e65" }
+      { fontSize: "24px", fill: this.theme.scoreColor }
     );
   }
 
@@ -104,7 +110,7 @@ class Game2048 extends Phaser.Scene {
     );
     tile.setPosition(x, y);
 
-    const textColor = value <= 4 ? "#776e65" : "#f9f6f2";
+    const textColor = value <= 4 ? this.theme.tileTextDark : this.theme.tileTextLight;
     const text = this.add
       .text(x, y, value.toString(), {
         fontSize: "32px",
@@ -125,20 +131,7 @@ class Game2048 extends Phaser.Scene {
   }
 
   getTileColor(value) {
-    const colors = {
-      2: 0xeee4da,
-      4: 0xede0c8,
-      8: 0xf2b179,
-      16: 0xf59563,
-      32: 0xf67c5f,
-      64: 0xf65e3b,
-      128: 0xedcf72,
-      256: 0xedcc61,
-      512: 0xedc850,
-      1024: 0xedc53f,
-      2048: 0xedc22e,
-    };
-    return colors[value] || 0x3c3a32;
+    return this.theme.tileColors[value] || 0x3c3a32;
   }
 
   handleKey(event) {
@@ -346,7 +339,8 @@ class Game2048 extends Phaser.Scene {
           );
 
           toTile.text.setText(newValue.toString());
-          const textColor = newValue <= 4 ? "#776e65" : "#f9f6f2";
+          const textColor =
+            newValue <= 4 ? this.theme.tileTextDark : this.theme.tileTextLight;
           toTile.text.setColor(textColor);
 
           this.tweens.add({
