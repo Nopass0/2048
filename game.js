@@ -23,6 +23,7 @@ class Game2048 extends Phaser.Scene {
   }
 
   create() {
+    this.isMoving = false;
     this.score = 0;
     this.highScore = parseInt(localStorage.getItem("highScore")) || 0;
     this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
