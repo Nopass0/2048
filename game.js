@@ -7,6 +7,8 @@ class Game2048 extends Phaser.Scene {
     this.score = 0;
     this.fourProbability = 0.1;
     this.isMoving = false;
+    this.audioCtx = null;
+    this.ambientOsc = null;
   }
 
   init() {
@@ -14,6 +16,7 @@ class Game2048 extends Phaser.Scene {
   }
 
   create() {
+    this.score = 0;
     this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
     document.body.style.backgroundColor = this.theme.backgroundColor;
     this.createGrid();
@@ -23,6 +26,8 @@ class Game2048 extends Phaser.Scene {
     this.createScoreText();
     this.input.keyboard.on("keydown", this.handleKey, this);
     this.input.on("pointerup", this.handleSwipe, this);
+    this.input.once("pointerdown", this.initAudio, this);
+    this.input.keyboard.once("keydown", this.initAudio, this);
   }
 
   createGrid() {
@@ -122,12 +127,25 @@ class Game2048 extends Phaser.Scene {
     this.tiles[row][col] = { tile, text, value };
 
     tile.setScale(0);
+    tile.setAlpha(0);
+    text.setScale(0);
+    text.setAlpha(0);
     this.tweens.add({
-      targets: [tile, text],
+      targets: tile,
       scale: 1,
-      duration: 200,
+      alpha: 1,
+      angle: 360,
+      duration: 300,
       ease: "Back.easeOut",
     });
+    this.tweens.add({
+      targets: text,
+      scale: 1,
+      alpha: 1,
+      duration: 300,
+      ease: "Back.easeOut",
+    });
+    this.playSpawnSound();
   }
 
   getTileColor(value) {
@@ -289,6 +307,7 @@ class Game2048 extends Phaser.Scene {
         ease: "Quad.easeOut",
         onComplete: resolve,
       });
+      this.playMoveSound();
     });
   }
 
@@ -305,6 +324,8 @@ class Game2048 extends Phaser.Scene {
 
       const newValue = fromTile.value * 2;
       this.score += newValue;
+      this.scoreText.setText("Score: " + this.score);
+      this.playMergeSound();
 
       const x =
         this.gridSpacing +
@@ -393,6 +414,57 @@ class Game2048 extends Phaser.Scene {
     this.isMoving = true;
     const message = win ? "Уровень пройден" : "Нельзя сделать ход";
     alert(message);
+    this.stopAmbient();
     this.scene.restart();
+  }
+
+  initAudio() {
+    if (!this.audioCtx) {
+      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      this.startAmbient();
+    }
+  }
+
+  startAmbient() {
+    if (!this.audioCtx) return;
+    this.ambientOsc = this.audioCtx.createOscillator();
+    const gain = this.audioCtx.createGain();
+    gain.gain.value = 0.02;
+    this.ambientOsc.type = "sine";
+    this.ambientOsc.frequency.value = 220;
+    this.ambientOsc.connect(gain).connect(this.audioCtx.destination);
+    this.ambientOsc.start();
+  }
+
+  stopAmbient() {
+    if (this.ambientOsc) {
+      this.ambientOsc.stop();
+      this.ambientOsc.disconnect();
+      this.ambientOsc = null;
+    }
+  }
+
+  playBeep(freq, duration = 0.1, volume = 0.1) {
+    if (!this.audioCtx) return;
+    const osc = this.audioCtx.createOscillator();
+    const gain = this.audioCtx.createGain();
+    osc.frequency.value = freq;
+    osc.type = "sine";
+    gain.gain.value = volume;
+    osc.connect(gain).connect(this.audioCtx.destination);
+    osc.start();
+    osc.stop(this.audioCtx.currentTime + duration);
+  }
+
+  playMoveSound() {
+    this.playBeep(200, 0.05, 0.05);
+  }
+
+  playMergeSound() {
+    this.playBeep(440, 0.15, 0.1);
+  }
+
+  playSpawnSound() {
+    this.playBeep(660, 0.05, 0.05);
   }
 }
